@@ -1,6 +1,6 @@
 export type Status = 'not_started' | 'in_progress' | 'completed' | 'archived'
 export type Kind = 'daily' | 'weekdays' | 'weekly_target' | 'once' | 'manual'
-export type Profile = { id: string; display_name: string; timezone: string }
+export type Profile = { id: string; display_name: string; timezone: string; avatar_path: string | null; calendar_token: string | null; preferences: { theme?: 'light' | 'dark' } }
 export type Offensive = { id: string; name: string; description: string; start_date: string; end_date: string; duration_days: number; status: Status; created_at: string }
 export type Activity = { id: string; name: string; description: string; archived_at: string | null }
 export type Schedule = { id: string; activity_id: string; kind: Kind; weekdays: number[]; weekly_target: number | null; valid_from: string; valid_until: string | null }

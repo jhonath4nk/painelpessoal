@@ -30,7 +30,7 @@ async function rows<T>(table: string, userId: string, date?: { column: string; f
 }
 export async function loadTracking(userId: string, selected: string | null): Promise<TrackingData> {
   const [profileResult, offensives] = await Promise.all([
-    supabase!.from('profiles').select('id,display_name,timezone').eq('id', userId).single(), rows<Offensive>('offensives', userId),
+    supabase!.from('profiles').select('id,display_name,timezone,avatar_path,calendar_token,preferences').eq('id', userId).single(), rows<Offensive>('offensives', userId),
   ])
   if (profileResult.error) throw profileResult.error
   const profile = profileResult.data as Profile

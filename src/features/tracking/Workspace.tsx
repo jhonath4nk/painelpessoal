@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { todayIn } from '../../domain/tracking'
 import { AccountPage } from '../auth/AccountPage'
+import { Avatar } from '../profile/Avatar'
 import { describeError, loadTracking, type TrackingData } from './api'
 import { Dashboard } from './pages/Dashboard'
 import { Today } from './pages/Today'
@@ -19,6 +20,7 @@ export function Workspace({ userId }: { userId: string }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const selected = useRef<string | null>(null)
   const generation = useRef(0)
   const working = useRef(false)
@@ -48,6 +50,34 @@ export function Workspace({ userId }: { userId: string }) {
     return () => { clearInterval(timer); window.removeEventListener('focus', updateDate) }
   }, [data, reload])
 
+  useEffect(() => {
+    const theme = data?.profile.preferences?.theme === 'dark' ? 'dark' : 'light'
+    document.documentElement.dataset.theme = theme
+    return () => { delete document.documentElement.dataset.theme }
+  }, [data?.profile.preferences?.theme])
+
+  useEffect(() => {
+    let active = true
+    const path = data?.profile.avatar_path
+    if (!path) { setAvatarUrl(null); return }
+    supabase!.storage.from('avatars').createSignedUrl(path, 60 * 60).then(({ data: signed, error: storageError }) => {
+      if (active) setAvatarUrl(storageError ? null : signed?.signedUrl || null)
+    })
+    return () => { active = false }
+  }, [data?.profile.avatar_path])
+
+  async function toggleTheme() {
+    if (!data || busy) return
+    const next = data.profile.preferences?.theme === 'dark' ? 'light' : 'dark'
+    setBusy(true); setError('')
+    try {
+      const result = await supabase!.from('profiles').update({ preferences: { ...data.profile.preferences, theme: next } }).eq('id', userId)
+      if (result.error) throw result.error
+      await reload()
+    } catch (toggleError) { setError(describeError(toggleError)) }
+    finally { setBusy(false) }
+  }
+
   const run: ActionRunner = async action => {
     if (working.current) return false
     working.current = true; setBusy(true); setError('')
@@ -66,7 +96,11 @@ export function Workspace({ userId }: { userId: string }) {
   return <div className="workspace">
     <a href="#main-content" className="skip-link" onClick={event => { event.preventDefault(); document.getElementById('main-content')?.focus() }}>Ir para o conteúdo</a>
     <aside className="sidebar">
-      <NavLink className="brand" to="/dashboard">E<span>↗</span> Evolução</NavLink>
+      <NavLink className="sidebar-user" to="/account" aria-label="Editar meu perfil">
+        <Avatar name={data?.profile.display_name || ''} src={avatarUrl} className="sidebar-avatar" />
+        <span>Olá{data?.profile.display_name ? `, ${data.profile.display_name}` : ''}</span>
+        <small>Editar perfil</small>
+      </NavLink>
       <p className="nav-label">ACOMPANHAMENTO</p>
       <nav aria-label="Menu principal">
         <NavLink to="/dashboard"><span aria-hidden="true">▦</span> Visão geral</NavLink>
@@ -75,10 +109,10 @@ export function Workspace({ userId }: { userId: string }) {
         <NavLink to="/journeys"><span aria-hidden="true">◇</span> Jornadas</NavLink>
         <NavLink to="/offensives"><span aria-hidden="true">◷</span> Ofensiva</NavLink>
       </nav>
-      <div className="sidebar-bottom"><NavLink to="/account">Minha conta <span aria-hidden="true">↗</span></NavLink><p>Consistência no presente.<br />Evolução ao longo do tempo.</p></div>
+      <div className="sidebar-bottom"><NavLink to="/account">Minha conta <span aria-hidden="true">↗</span></NavLink></div>
     </aside>
     <div className="workspace-body">
-      <header className="topbar"><div className="breadcrumb">Meu espaço <span>/</span> <strong>{page}</strong></div><NavLink to="/account" className="profile-badge" aria-label="Abrir minha conta"><span className="avatar" aria-hidden="true">{data?.profile.display_name?.slice(0, 1).toUpperCase() || 'E'}</span>{data?.profile.display_name || 'Meu acompanhamento'}</NavLink></header>
+      <header className="topbar"><button className="theme-toggle" onClick={toggleTheme} disabled={!data || busy} aria-label={data?.profile.preferences?.theme === 'dark' ? 'Usar modo claro' : 'Usar modo escuro'}>{data?.profile.preferences?.theme === 'dark' ? '☀' : '◐'} <span>{data?.profile.preferences?.theme === 'dark' ? 'Claro' : 'Escuro'}</span></button><div className="breadcrumb">Meu espaço <span>/</span> <strong>{page}</strong></div><NavLink to="/account" className="profile-badge" aria-label="Abrir minha conta"><Avatar name={data?.profile.display_name || ''} src={avatarUrl} />{data?.profile.display_name || 'Meu acompanhamento'}</NavLink></header>
       <main className="page-content" id="main-content" tabIndex={-1}>
         {error && <div className="alert" role="alert"><p>{error}</p><button onClick={() => reload().catch(error => setError(describeError(error)))} disabled={busy || refreshing}>Tentar novamente</button></div>}
         {!data ? <div className="panel empty-state" role="status"><h1>{error ? 'Não foi possível abrir seu espaço' : 'Preparando seu acompanhamento…'}</h1><p>Carregando perfil, período e atividades.</p></div> : <>
@@ -95,7 +129,7 @@ export function Workspace({ userId }: { userId: string }) {
             <Route path="/activities" element={<Activities data={data} run={run} busy={busy || data.needsMigration} userId={userId} />} />
             <Route path="/journeys" element={<Journeys data={data} run={run} busy={busy} userId={userId} />} />
             <Route path="/offensives" element={<Offensives data={data} run={run} busy={busy} userId={userId} />} />
-            <Route path="/account" element={<AccountPage />} />
+            <Route path="/account" element={<AccountPage onProfileUpdated={reload} />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </>}

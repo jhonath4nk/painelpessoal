@@ -31,6 +31,20 @@ Jornadas acompanham metas de médio e longo prazo e são separadas da rotina di�
 
 Para habilitá-las em um projeto já instalado, execute uma vez [005_journey_steps.sql](supabase/migrations/005_journey_steps.sql) no SQL Editor do Supabase. A migração reutiliza a tabela `journeys` existente e cria somente `journey_steps`, com RLS, índices e conclusão automática da jornada. Não reaplique as migrações anteriores.
 
+## Perfil, tema e agenda Apple
+
+O modo claro é o padrão. O botão no canto superior esquerdo alterna para o modo escuro e salva a escolha no perfil. Em **Minha conta**, informe o nome que deve aparecer no menu e envie uma foto JPG, PNG ou WebP de até 2 MB.
+
+Para ativar foto e agenda em um projeto já instalado, execute uma vez [006_profile_preferences_calendar.sql](supabase/migrations/006_profile_preferences_calendar.sql) no SQL Editor. Depois, publique a função `calendar` com a Supabase CLI:
+
+```sh
+supabase login
+supabase link --project-ref lhfwbamdvzpzyscqarnt
+supabase functions deploy calendar --no-verify-jwt
+```
+
+A função usa a chave de serviço guardada no ambiente seguro da Edge Function; ela não é colocada no frontend. Em **Minha conta**, copie o link exibido em **Agenda do dia** e, no Calendário da Apple, escolha **Arquivo > Nova Assinatura de Calendário**. O link contém um token individual; use **Gerar novo link** para invalidar um endereço anterior.
+
 ## Usar a fase 3
 
 1. Após aplicar a migração 004, atualize a aplicação local. Se aparecer o aviso de banco pendente, clique em **Verificar atualização**.

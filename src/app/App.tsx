@@ -1,9 +1,10 @@
-import { useSyncExternalStore } from 'react'
+import { lazy, Suspense, useSyncExternalStore } from 'react'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { getAuthState, subscribeAuth } from '../features/auth/auth-store'
 import { AuthPage } from '../features/auth/AuthPage'
-import { AccountPage } from '../features/auth/AccountPage'
 import { configurationError } from '../lib/supabase'
+
+const Workspace = lazy(() => import('../features/tracking/Workspace').then(module => ({ default: module.Workspace })))
 
 export function App() {
   const auth = useSyncExternalStore(subscribeAuth, getAuthState)
@@ -11,8 +12,7 @@ export function App() {
   if (auth.loading) return <main className="setup" role="status">Conectando…</main>
   if (auth.recovery) return <AuthPage />
   return <HashRouter><Routes>
-    <Route path="/login" element={auth.session ? <Navigate to="/account" replace /> : <AuthPage />} />
-    <Route path="/account" element={auth.session ? <AccountPage key={auth.session.user.id} /> : <Navigate to="/login" replace />} />
-    <Route path="*" element={<Navigate to={auth.session ? '/account' : '/login'} replace />} />
+    <Route path="/login" element={auth.session ? <Navigate to="/dashboard" replace /> : <AuthPage />} />
+    <Route path="/*" element={auth.session ? <Suspense fallback={<main className="setup" role="status">Abrindo seu acompanhamento…</main>}><Workspace key={auth.session.user.id} userId={auth.session.user.id} /></Suspense> : <Navigate to="/login" replace />} />
   </Routes></HashRouter>
 }
