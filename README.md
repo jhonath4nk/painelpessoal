@@ -2,20 +2,44 @@
 
 Aplicação pessoal para acompanhar **consistência diária** e **evolução de objetivos**, separadamente. React, Vite, TypeScript, CSS e Supabase. Hospedagem futura no GitHub Pages, sem backend separado.
 
-## Estado atual — fase 2
+## Estado atual — fase 3 (local)
 
 Implementado localmente:
 
 - Tela de login, recuperação de senha e sessão persistente com Supabase Auth.
 - Rotas protegidas e leitura do perfil do usuário autenticado.
 - Tratamento dos links de autenticação antes do HashRouter.
-- Três migrações SQL: modelo, RLS e integridade dos registros diários.
+- Quatro migrações SQL: modelo, RLS, integridade dos registros diários e sincronização da rotina.
+- Layout responsivo com Dashboard, Hoje, Atividades, Ofensiva e Minha conta.
+- Criação e edição de ofensivas, incluindo arquivamento e consulta aos períodos anteriores.
+- Recorrências diárias, dias da semana, meta semanal com dias planejados, pontuais e manuais.
+- Edição da rotina com vigência futura e snapshots que preservam os nomes e pesos históricos.
+- Marcação, remoção/restauração e edição apenas no planejamento de Hoje.
+- Notas diárias, energia e humor opcionais.
+- Sincronização idempotente de dias sem acesso e resumos persistidos, inclusive sem planejamento.
+- Métricas de tempo e execução separadas, médias semanais/mensais, sequências e gráfico diário.
 - Testes executáveis do PostgreSQL/RLS com dois usuários em PGlite (apenas desenvolvimento).
 - Workflow preparado para validar e publicar no GitHub Pages no futuro.
 
-Ainda não implementado: dashboard, criação da ofensiva na interface, Hoje, CRUD da hierarquia, sincronização retroativa das recorrências, progresso hierárquico, hábitos, histórico, revisão e exportação. Essas funções serão construídas nas fases 3–6. O modelo do banco está preparado; isso não significa que todas as regras dessas fases já estejam implementadas.
+Ainda não implementado: CRUD da hierarquia de jornadas/objetivos/tarefas, gestão específica de hábitos, página de histórico com filtros e notas passadas, revisão semanal, backlog e exportação. O dashboard calcula progresso hierárquico de registros existentes, mas a interface para gerenciá-los pertence à fase 4. Essas próximas funcionalidades continuam nas fases 4–6.
 
-**Nesta entrega não houve push nem publicação. As migrações ainda precisam ser aplicadas ao Supabase real.**
+**Não houve push nem publicação.** O usuário confirmou a instalação inicial e o login com leitura do perfil no Supabase real. Para habilitar a fase 3 no mesmo projeto, execute somente `supabase/migrations/004_daily_tracking.sql`, uma vez. A atualização não apaga dados. Não execute novamente o instalador inicial. A confirmação da atualização e o fluxo completo da fase 3 na conta real ainda dependem da aplicação desse SQL; os testes locais não equivalem a essa validação remota.
+
+## Jornadas
+
+Jornadas acompanham metas de médio e longo prazo e são separadas da rotina diária. Cada jornada contém apenas etapas ordenadas. O progresso é `etapas concluídas ÷ total de etapas`; ele nunca altera percentual diário, sequência, médias ou ofensiva.
+
+Para habilitá-las em um projeto já instalado, execute uma vez [005_journey_steps.sql](supabase/migrations/005_journey_steps.sql) no SQL Editor do Supabase. A migração reutiliza a tabela `journeys` existente e cria somente `journey_steps`, com RLS, índices e conclusão automática da jornada. Não reaplique as migrações anteriores.
+
+## Usar a fase 3
+
+1. Após aplicar a migração 004, atualize a aplicação local. Se aparecer o aviso de banco pendente, clique em **Verificar atualização**.
+2. Em **Ofensiva**, crie o período, informando nome, data inicial e duração. Apenas uma ofensiva pode ficar em andamento. A interface aceita de 1 a 36.500 dias.
+3. Em **Atividades**, cadastre sua rotina. Novas rotinas começam hoje ou em data futura; não criam falhas retroativas. Para meta semanal, selecione os dias e a quantidade de dias será a meta.
+4. Em **Hoje**, marque as atividades. Você também pode adicionar algo pontual, editar o nome apenas naquele dia, remover e restaurar um item do planejamento.
+5. No **Dashboard**, confira os números. Hoje é parcial; médias consolidadas excluem o dia atual e dias sem planejamento.
+
+Editar a rotina vale a partir de amanhã ou da data futura selecionada. Para mudar apenas hoje, use Hoje. Arquivar interrompe datas futuras e preserva o planejamento de hoje e o histórico. A sincronização considera os períodos de vigência salvos, inclusive se você não tiver aberto o aplicativo por vários dias. A página verifica a virada do dia no fuso do perfil a cada 30 segundos e ao retornar à janela.
 
 ## Requisitos
 
@@ -51,7 +75,7 @@ Sem configuração válida, a aplicação apresenta instruções de configuraç�
 
 ## Preparar Supabase
 
-Para a instalação inicial, abra `supabase/instalar.sql`, copie todo o conteúdo para o SQL Editor do projeto e clique **Run**. O arquivo reúne as três migrações em uma única transação: tabelas e políticas ficam prontas juntas. Ele cria o perfil das contas já cadastradas em Authentication, sem alterar login ou senha. Se detectar instalação anterior, interrompe sem sobrescrever dados.
+Para uma instalação inicial em projeto novo, abra `supabase/instalar.sql`, copie todo o conteúdo para o SQL Editor e clique **Run**. O arquivo reúne as quatro migrações em uma única transação: tabelas e políticas ficam prontas juntas. Ele cria o perfil das contas já cadastradas em Authentication, sem alterar login ou senha. Se detectar instalação anterior, interrompe sem sobrescrever dados.
 
 Depois, execute `supabase/verificar_instalacao.sql`. A primeira consulta deve mostrar 16 tabelas com `existe`, `rls_ativa` e `anon_sem_acesso` verdadeiros. A segunda deve mostrar as três funções privadas com `frontend_pode_executar` falso.
 
@@ -60,10 +84,11 @@ O instalador é gerado por `node scripts/prepare-database.mjs`. Os arquivos indi
 1. `supabase/migrations/001_schema.sql`
 2. `supabase/migrations/002_security.sql`
 3. `supabase/migrations/003_integrity.sql`
+4. `supabase/migrations/004_daily_tracking.sql`
 
 Use o instalador reunido **ou** os arquivos individuais em ordem; nunca os dois. Se falhar, corrija a causa antes de continuar. Não reaplique uma migração bem-sucedida: futuras alterações terão novos arquivos. Para inspecionar um projeto existente, confira primeiro as tabelas e funções antes de aplicar estes scripts. A configuração administrativa e migrações nunca são feitas usando a chave pública no navegador.
 
-As tabelas são criadas na primeira migração; as políticas e permissões na segunda. Aplique as três em sequência antes de disponibilizar o aplicativo a qualquer usuário.
+Em um projeto novo, prefira o instalador atômico. Em projetos existentes, aplique apenas as novas migrações, sem repetir as já executadas.
 
 Em Authentication:
 
@@ -89,7 +114,9 @@ Tabelas: profiles, offensives, cycles, journeys, objectives, tasks, subtasks, da
 - Registros de alteração e resumos não aceitam escrita direta de usuários autenticados.
 - Triggers mantêm datas de status e resumos diários dentro da mesma transação.
 - Remover item do planejamento usa `skipped`; sua contribuição é excluída do denominador. `planned` não executado representa 0%. Sem peso planejado, percentual é `NULL`.
-- Dias sem qualquer ocorrência ainda serão materializados pela sincronização da fase 3. Não interpretar a ausência atual de resumo como regra de calendário implementada.
+- Dias sem qualquer ocorrência recebem resumo com percentual nulo, excluído das médias. Dias planejados sem execução recebem zero.
+- `sync_tracking` sincroniza períodos de até 366 dias por chamada, sempre limitados ao dia atual no fuso do perfil. A interface divide períodos maiores em blocos, sem truncar o histórico.
+- RPCs de criação/edição da rotina são transacionais e validam o proprietário a partir de `auth.uid()`, sem aceitar um usuário arbitrário informado pelo cliente.
 - Recorrências usam dias ISO (segunda=1, domingo=7) e intervalos inclusivos sem sobreposição. `weekly_target` exige tantos dias planejados quanto a meta semanal.
 - Hábitos reutilizam atividade e histórico, sem tabela duplicada de execuções.
 - Exclusões com dependências são bloqueadas por foreign keys; arquivamento preserva dados.
@@ -110,7 +137,7 @@ Ou `npm run check` para executar a sequência. `npm run preview` serve o build l
 
 Os testes PGlite executam as mesmas migrações SQL em PostgreSQL embarcado e simulam o schema mínimo de Auth e os papéis do Supabase. Não usam banco remoto, não gravam dados reais e não fazem parte do bundle de produção. Cobrem isolamento de usuários, permissões, relacionamentos, restrições, recorrências e percentuais diários. Os testes de autenticação usam um cliente simulado para validar eventos e ordem de inicialização.
 
-Antes de considerar a fase 2 concluída no ambiente real: aplicar migrações, criar a conta, testar login, atualização de página, logout e recuperação por e-mail; verificar isolamento usando duas contas de teste autorizadas. Nunca usar dados pessoais reais nesses testes.
+O usuário confirmou login e leitura do perfil reais. Recuperação por e-mail e isolamento real entre duas contas ainda devem ser conferidos com contas de teste autorizadas. Na fase 3, testar criação de ofensiva, atividade, conclusão, recarga e persistência das notas após aplicar a migração 004. Os testes de PostgreSQL cobrem os RPCs sem gravar dados pessoais reais.
 
 ## GitHub Pages — somente quando solicitado
 
@@ -131,6 +158,8 @@ Migrations SQL não são executadas por esse workflow. Nenhum segredo administra
 ```text
 src/app/                 composição e rotas
 src/features/auth/       login, sessão e perfil
+src/features/tracking/   dashboard, rotina, ofensivas e Hoje
+src/domain/              datas, execução, sequências e progresso
 src/lib/                 configuração e cliente Supabase
 src/styles/              CSS responsivo
 supabase/migrations/     SQL versionado
@@ -142,7 +171,7 @@ As pastas das próximas funcionalidades serão criadas quando houver código cor
 
 ## Próximas fases
 
-- Fase 3: ofensiva, layout, dashboard, Hoje e sincronização de recorrências com preservação histórica.
+- Fase 3 implementada localmente: aguarda validação final na conta real após aplicar a atualização SQL.
 - Fase 4: hierarquia e progresso de jornadas, objetivos, tarefas e subtarefas.
 - Fase 5: hábitos, histórico, revisão e comparações.
 - Fase 6: backlog, ajustes completos e exportações JSON/CSV.
