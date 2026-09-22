@@ -51,13 +51,17 @@ Sem configuração válida, a aplicação apresenta instruções de configuraç�
 
 ## Preparar Supabase
 
-No SQL Editor do projeto, aplique estes arquivos **uma única vez, nesta ordem**, em um banco novo:
+Para a instalação inicial, abra `supabase/instalar.sql`, copie todo o conteúdo para o SQL Editor do projeto e clique **Run**. O arquivo reúne as três migrações em uma única transação: tabelas e políticas ficam prontas juntas. Ele cria o perfil das contas já cadastradas em Authentication, sem alterar login ou senha. Se detectar instalação anterior, interrompe sem sobrescrever dados.
+
+Depois, execute `supabase/verificar_instalacao.sql`. A primeira consulta deve mostrar 16 tabelas com `existe`, `rls_ativa` e `anon_sem_acesso` verdadeiros. A segunda deve mostrar as três funções privadas com `frontend_pode_executar` falso.
+
+O instalador é gerado por `node scripts/prepare-database.mjs`. Os arquivos individuais continuam sendo a fonte versionada:
 
 1. `supabase/migrations/001_schema.sql`
 2. `supabase/migrations/002_security.sql`
 3. `supabase/migrations/003_integrity.sql`
 
-Cada arquivo usa uma transação. Se falhar, corrija a causa antes de aplicar o próximo. Não reaplique uma migração bem-sucedida: futuras alterações terão novos arquivos. Para inspecionar um projeto existente, confira primeiro as tabelas e funções antes de aplicar estes scripts. A configuração administrativa e migrações nunca são feitas usando a chave pública no navegador.
+Use o instalador reunido **ou** os arquivos individuais em ordem; nunca os dois. Se falhar, corrija a causa antes de continuar. Não reaplique uma migração bem-sucedida: futuras alterações terão novos arquivos. Para inspecionar um projeto existente, confira primeiro as tabelas e funções antes de aplicar estes scripts. A configuração administrativa e migrações nunca são feitas usando a chave pública no navegador.
 
 As tabelas são criadas na primeira migração; as políticas e permissões na segunda. Aplique as três em sequência antes de disponibilizar o aplicativo a qualquer usuário.
 
