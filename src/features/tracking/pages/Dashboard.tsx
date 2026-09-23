@@ -1,7 +1,15 @@
 import { Link } from 'react-router-dom'
-import { dateLabel, execution, offensiveTime, percentLabel, statistics, statusLabels } from '../../../domain/tracking'
+import { addDays, dateLabel, execution, offensiveTime, percentLabel, statistics, statusLabels, type Summary } from '../../../domain/tracking'
 import type { TrackingData } from '../api'
 import { Bar, ExecutionRing, Metric } from '../components'
+
+function dayState(day: string, summary: Summary | undefined, today: string) {
+  if (day > today) return 'future'
+  if (!summary || summary.execution_percent === null) return 'unplanned'
+  if (summary.completed_count === summary.planned_count) return 'complete'
+  if (summary.completed_count === 0) return 'missed'
+  return 'partial'
+}
 
 export function Dashboard({ data }: { data: TrackingData }) {
   const { offensive, today } = data
@@ -9,29 +17,31 @@ export function Dashboard({ data }: { data: TrackingData }) {
   const time = offensiveTime(offensive, today)
   const stats = statistics(data.summaries, today)
   const daily = execution(data.logs)
-  const chart = [...data.summaries].sort((a, b) => a.day.localeCompare(b.day)).slice(-30)
+  const summaries = new Map(data.summaries.map(summary => [summary.day, summary]))
+  const periodDays = Array.from({ length: offensive.duration_days }, (_, index) => addDays(offensive.start_date, index))
   const activeJourneys = data.journeys.filter(item => item.status !== 'archived')
-  const journeys = activeJourneys.slice(0, 3)
-  const activeJourneyIds = new Set(activeJourneys.map(item => item.id))
-  const journeySteps = data.journeySteps.filter(step => activeJourneyIds.has(step.journey_id))
+  const journeyIds = new Set(activeJourneys.map(item => item.id))
+  const journeySteps = data.journeySteps.filter(step => journeyIds.has(step.journey_id))
   const completedSteps = journeySteps.filter(step => step.status === 'completed').length
   const journeysPercent = journeySteps.length ? completedSteps / journeySteps.length * 100 : 0
-  const overdue = data.tasks.filter(item => item.status !== 'completed' && item.status !== 'archived' && item.due_date && item.due_date < today)
+  const journeys = activeJourneys.slice(0, 4)
   return <>
-    <section className="offensive-banner"><div><p className="eyebrow">{statusLabels[offensive.status]} · {offensive.duration_days} DIAS</p><h2>{offensive.name}</h2><p>{dateLabel(offensive.start_date, true)} — {dateLabel(offensive.end_date, true)}</p></div><div className="offensive-clock"><strong>{today < offensive.start_date ? 'Ainda não começou' : today > offensive.end_date ? 'Período encerrado' : `Dia ${time.current}`}<small>{today >= offensive.start_date && today <= offensive.end_date ? ` / ${offensive.duration_days}` : ''}</small></strong><Bar value={time.temporal} label="Tempo transcorrido" /><span>{percentLabel(time.temporal)} do tempo · {time.remaining} dias restantes</span></div></section>
-
-    <section className="dashboard-domain daily-domain"><div className="domain-heading"><div><p className="eyebrow">DISCIPLINA DIÁRIA</p><h2>Como você está cuidando do seu dia a dia</h2><p>Execução das atividades planejadas. É este número que mostra se você está firme na rotina.</p></div><Link className="text-link" to="/today">Abrir Hoje →</Link></div>
-      <div className="metrics-grid"><Metric label="Média de disciplina" value={percentLabel(stats.average)} detail="Dias encerrados com planejamento" /><Metric label="Sequência atual" value={<>{stats.streak}<small> dias</small></>} detail={`Melhor sequência: ${stats.best} dias`} /><Metric label="Ritmo desta semana" value={percentLabel(stats.week)} detail="Segunda a domingo · dias encerrados" /><Metric label="Ritmo deste mês" value={percentLabel(stats.month)} detail="Dias encerrados da ofensiva" /></div>
-      <div className="dashboard-columns"><section className="panel chart-panel"><div className="section-heading"><div><h2>Histórico de disciplina</h2><p>Execução diária · últimos {chart.length} dias do período</p></div><span className="legend"><i />Execução</span></div>
-        {chart.length ? <div className="chart" role="img" aria-label="Gráfico de execução diária. Valores disponíveis na lista de dias abaixo.">{chart.map(row => <div className={`chart-column ${row.day === today ? 'current-day' : ''}`} key={row.day}><div className={`chart-bar ${row.execution_percent === null ? 'unplanned' : ''}`} style={{ height: `${Math.max(Number(row.execution_percent) || 0, 2)}%` }} title={`${dateLabel(row.day, true)}: ${row.execution_percent === null ? 'Sem planejamento' : percentLabel(Number(row.execution_percent))}${row.day === today ? ' · parcial' : ''}`} /><span>{row.day.slice(-2)}</span></div>)}</div> : <p className="empty-copy">O histórico começa na data inicial da ofensiva.</p>}
-        <details className="chart-data"><summary>Ver valores por dia</summary><ul>{chart.map(row => <li key={row.day}>{dateLabel(row.day, true)} <strong>{row.execution_percent === null ? 'Sem planejamento' : percentLabel(Number(row.execution_percent))}{row.day === today ? ' · parcial' : ''}</strong></li>)}</ul></details>
-        <div className="day-counts"><span><b>{stats.perfect}</b> completos</span><span><b>{stats.partial}</b> parciais</span><span><b>{stats.zero}</b> sem execução</span><span><b>{stats.unplanned}</b> sem planejamento</span></div>
-      </section><section className="panel today-card"><div className="section-heading"><h2>Seu dia, hoje</h2><span className="pill">Parcial</span></div><ExecutionRing value={daily.percent} /><p>{daily.planned ? `${daily.completed} de ${daily.planned} atividades concluídas` : 'Sem atividades planejadas'}</p><Link className="button primary" to="/today">Abrir Hoje →</Link></section></div>
+    <section className="period-map panel"><div className="period-map-heading"><div><p className="eyebrow">{statusLabels[offensive.status]} · {offensive.duration_days} DIAS</p><h2>{offensive.name}</h2><p>{dateLabel(offensive.start_date, true)} — {dateLabel(offensive.end_date, true)}</p></div><div className="period-map-day"><strong>{today < offensive.start_date ? 'Ainda não começou' : today > offensive.end_date ? 'Período encerrado' : `Dia ${time.current}`}<small>{today >= offensive.start_date && today <= offensive.end_date ? ` / ${offensive.duration_days}` : ''}</small></strong><span>{percentLabel(time.temporal)} do período · {time.remaining} dias restantes</span></div></div>
+      <div className="period-map-legend" aria-label="Legenda do mapa de dias"><span><i className="complete" /> Tudo concluído</span><span><i className="partial" /> Faltou item</span><span><i className="missed" /> Nada concluído</span><span><i className="unplanned" /> Sem planejamento</span></div>
+      <div className="period-grid" role="img" aria-label="Mapa de execução dos dias da ofensiva">{periodDays.map(day => { const summary = summaries.get(day); const state = dayState(day, summary, today); const completion = summary?.execution_percent === null || !summary ? 'sem planejamento' : `${summary.completed_count} de ${summary.planned_count} concluídas`; return <span className={`period-day ${state}`} key={day} title={`${dateLabel(day, true)}: ${completion}`} aria-label={`${dateLabel(day, true)}: ${completion}`} /> })}</div>
     </section>
 
-    <section className="dashboard-domain journey-domain"><div className="domain-heading"><div><p className="eyebrow">JORNADAS</p><h2>Para onde você está indo</h2><p>Avanço de longo prazo. Ele não entra na média de disciplina diária.</p></div><Link className="text-link" to="/journeys">Ver todas →</Link></div>
-      <div className="metrics-grid journey-metrics"><Metric label="Progresso das jornadas" value={percentLabel(journeysPercent)} detail="Todas as etapas das jornadas ativas" /><Metric label="Etapas concluídas" value={<>{completedSteps}<small> de {journeySteps.length}</small></>} detail="Progresso consolidado" /><Metric label="Jornadas em andamento" value={data.journeys.filter(item => item.status === 'in_progress').length} detail="Metas de longo prazo ativas" /></div>
-      <div className="dashboard-columns"><section className="panel"><div className="section-heading"><div><h2>Progresso por jornada</h2><p>Cada barra mostra o caminho restante de uma meta.</p></div><Link className="text-link" to="/journeys">Ver todas →</Link></div>{journeys.length ? <div className="journey-progress">{journeys.map(item => { const steps = data.journeySteps.filter(step => step.journey_id === item.id); const value = steps.length ? steps.filter(step => step.status === 'completed').length / steps.length * 100 : 0; return <div key={item.id}><div><strong>{item.name}</strong><span>{percentLabel(value)}</span></div><Bar value={value} label={`Progresso de ${item.name}`} /></div> })}</div> : <p className="empty-copy">Nenhuma jornada ativa. Crie uma para acompanhar metas que não pertencem à rotina diária.</p>}</section><section className="panel"><h2>Próxima direção</h2><div className="focus-line"><span>Jornadas ativas</span><strong>{data.journeys.filter(item => item.status === 'in_progress').length}</strong></div><div className="focus-line"><span>Tarefas atrasadas</span><strong>{overdue.length}</strong></div><div className="focus-line"><span>Tempo de ofensiva</span><strong>{time.elapsed} dias</strong></div><p className="muted compact">Disciplina é o que você faz hoje. Jornadas mostram o progresso acumulado em direção às suas metas.</p></section></div>
-    </section>
+    <div className="dashboard-split">
+      <section className="dashboard-domain journey-domain"><div className="domain-heading"><div><p className="eyebrow">JORNADAS · LONGO PRAZO</p><h2>Para onde você está indo</h2><p>Progresso acumulado das metas. Ele não altera sua disciplina diária.</p></div><Link className="text-link" to="/journeys">Ver todas →</Link></div>
+        <div className="journey-metrics"><Metric label="Progresso das jornadas" value={percentLabel(journeysPercent)} detail="Etapas concluídas em todas as jornadas" /><Metric label="Etapas concluídas" value={<>{completedSteps}<small> de {journeySteps.length}</small></>} detail="Caminho já percorrido" /></div>
+        <section className="panel journey-overview"><div className="section-heading"><div><h2>Progresso por jornada</h2><p>Veja onde está e escolha a próxima etapa.</p></div></div>{journeys.length ? <div className="journey-progress">{journeys.map(item => { const steps = data.journeySteps.filter(step => step.journey_id === item.id); const value = steps.length ? steps.filter(step => step.status === 'completed').length / steps.length * 100 : 0; return <div key={item.id}><div><strong>{item.name}</strong><span>{percentLabel(value)}</span></div><Bar value={value} label={`Progresso de ${item.name}`} /></div> })}</div> : <p className="empty-copy">Nenhuma jornada ativa. Crie uma para acompanhar metas que não pertencem à rotina diária.</p>}<Link className="button journey-button" to="/journeys">Abrir Jornadas →</Link></section>
+      </section>
+
+      <section className="dashboard-domain daily-domain"><div className="domain-heading"><div><p className="eyebrow">DISCIPLINA · CURTO PRAZO</p><h2>Como você está no dia a dia</h2><p>Percentual de cumprimento das tarefas que você planejou.</p></div><Link className="text-link" to="/today">Abrir Hoje →</Link></div>
+        <div className="daily-metrics"><Metric label="Média geral de disciplina" value={percentLabel(stats.average)} detail="Todos os dias encerrados com planejamento" /><Metric label="Disciplina neste mês" value={percentLabel(stats.month)} detail="Dias encerrados no mês atual" /></div>
+        <section className="panel daily-overview"><div className="section-heading"><div><h2>Seu dia, hoje</h2><p>{daily.planned ? `${daily.completed} de ${daily.planned} atividades concluídas` : 'Sem atividades planejadas'}</p></div><span className="pill">Parcial</span></div><ExecutionRing value={daily.percent} /><Link className="button primary" to="/today">Abrir tarefas de hoje →</Link></section>
+        <section className="panel daily-summary"><h2>Leitura rápida</h2><div className="focus-line"><span>Dias completos</span><strong>{stats.perfect}</strong></div><div className="focus-line"><span>Dias parciais</span><strong>{stats.partial}</strong></div><div className="focus-line"><span>Dias sem execução</span><strong>{stats.zero}</strong></div><p className="muted compact">Use o mapa acima para localizar padrões. Verde indica disciplina completa; azul mostra que faltou algo; vermelho pede atenção.</p></section>
+      </section>
+    </div>
   </>
 }
