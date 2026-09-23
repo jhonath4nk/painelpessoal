@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { execution, percentLabel, type DailyLog, type Note } from '../../../domain/tracking'
+import { dateLabel, execution, percentLabel, type DailyLog, type Note } from '../../../domain/tracking'
 import { supabase } from '../../../lib/supabase'
 import { rpc } from '../api'
 import { Bar, Modal } from '../components'
@@ -9,18 +9,21 @@ import { saveRow, type PageProps } from '../Workspace'
 export function Today({ data, run, busy, userId }: PageProps) {
   const [adding, setAdding] = useState(false)
   const [renaming, setRenaming] = useState<DailyLog | null>(null)
-  const current = execution(data.logs)
-  const planned = data.logs.filter(item => item.status !== 'skipped').sort((a, b) => a.name_snapshot.localeCompare(b.name_snapshot))
-  const skipped = data.logs.filter(item => item.status === 'skipped')
+  const [reviewingYesterday, setReviewingYesterday] = useState(false)
+  const displayedLogs = reviewingYesterday ? data.yesterdayLogs : data.logs
+  const current = execution(displayedLogs)
+  const planned = displayedLogs.filter(item => item.status !== 'skipped').sort((a, b) => a.name_snapshot.localeCompare(b.name_snapshot))
+  const skipped = displayedLogs.filter(item => item.status === 'skipped')
+  const dayLabel = reviewingYesterday ? `Revisão de ${dateLabel(data.yesterdayLogs[0]?.scheduled_date || data.today, true)}` : 'O que importa hoje'
   return <div className="today-layout"><div>
-    <section className="panel daily-plan"><div className="section-heading"><div><h2>O que importa hoje</h2><p>{current.planned ? `${current.completed} de ${current.planned} concluídas` : 'Planeje o seu dia, no seu ritmo.'}</p></div><strong className="daily-percent">{percentLabel(current.percent)}</strong></div><Bar value={current.percent} label="Execução de hoje" />
+    <section className="panel daily-plan"><div className="section-heading"><div><h2>{dayLabel}</h2><p>{current.planned ? `${current.completed} de ${current.planned} concluídas` : reviewingYesterday ? 'Não havia atividades planejadas ontem.' : 'Planeje o seu dia, no seu ritmo.'}</p></div><strong className="daily-percent">{percentLabel(current.percent)}</strong></div><Bar value={current.percent} label={reviewingYesterday ? 'Execução de ontem' : 'Execução de hoje'} />
       <div className="activity-checklist">{planned.map(item => <article className={`checklist-row ${item.status === 'completed' ? 'is-complete' : ''}`} key={item.id}>
         <label className="activity-check"><input type="checkbox" checked={item.status === 'completed'} disabled={busy} onChange={() => run(() => saveRow('daily_activity_logs', { status: item.status === 'completed' ? 'planned' : 'completed' }, item.id))} /><span><b>{item.name_snapshot}</b><small>{item.status === 'completed' ? 'Concluída' : 'Ainda não concluída'}</small></span></label>
-        <div className="row-actions"><button disabled={busy} onClick={() => setRenaming(item)} aria-label={`Editar ${item.name_snapshot} apenas hoje`}>Editar</button><button disabled={busy} onClick={() => run(() => saveRow('daily_activity_logs', { status: 'skipped' }, item.id))} aria-label={`Remover ${item.name_snapshot} do planejamento de hoje`}>Remover</button></div>
+        {!reviewingYesterday && <div className="row-actions"><button disabled={busy} onClick={() => setRenaming(item)} aria-label={`Editar ${item.name_snapshot} apenas hoje`}>Editar</button><button disabled={busy} onClick={() => run(() => saveRow('daily_activity_logs', { status: 'skipped' }, item.id))} aria-label={`Remover ${item.name_snapshot} do planejamento de hoje`}>Remover</button></div>}
       </article>)}</div>
-      {!planned.length && <div className="empty-state"><div className="empty-icon" aria-hidden="true">☀</div><h3>Sem atividades planejadas</h3><p>Este dia não será contado como falha. Adicione uma atividade ou configure sua rotina.</p></div>}
-      <div className="section-heading"><button className="primary" disabled={busy} onClick={() => setAdding(true)}>Adicionar a hoje +</button><Link className="text-link" to="/activities">Gerenciar rotina →</Link></div>
-      {skipped.length > 0 && <details className="removed-activities"><summary>Removidas de hoje ({skipped.length})</summary>{skipped.map(item => <div key={item.id}><span>{item.name_snapshot}</span><button disabled={busy} onClick={() => run(() => saveRow('daily_activity_logs', { status: 'planned' }, item.id))}>Restaurar</button></div>)}</details>}
+      {!planned.length && <div className="empty-state"><div className="empty-icon" aria-hidden="true">☀</div><h3>Sem atividades planejadas</h3><p>{reviewingYesterday ? 'Nenhuma atividade foi registrada para ontem.' : 'Este dia não será contado como falha. Adicione uma atividade ou configure sua rotina.'}</p></div>}
+      <div className="section-heading">{reviewingYesterday ? <button onClick={() => setReviewingYesterday(false)}>Voltar para hoje</button> : <><button className="primary" disabled={busy} onClick={() => setAdding(true)}>Adicionar a hoje +</button><Link className="text-link" to="/activities">Gerenciar rotina →</Link><button className="text-button review-yesterday" disabled={busy} onClick={() => setReviewingYesterday(true)}>Corrigir ontem</button></>}</div>
+      {!reviewingYesterday && skipped.length > 0 && <details className="removed-activities"><summary>Removidas de hoje ({skipped.length})</summary>{skipped.map(item => <div key={item.id}><span>{item.name_snapshot}</span><button disabled={busy} onClick={() => run(() => saveRow('daily_activity_logs', { status: 'planned' }, item.id))}>Restaurar</button></div>)}</details>}
     </section><div className="quiet-note"><span aria-hidden="true">↗</span><p>Concluir uma atividade registra sua consistência. O avanço dos objetivos será acompanhado separadamente.</p></div>
   </div><DailyNotes key={data.today} note={data.note} busy={busy} save={async values => run(async () => {
     const result = await supabase!.from('daily_notes').upsert({ ...values, user_id: userId, day: data.today }, { onConflict: 'user_id,day' })

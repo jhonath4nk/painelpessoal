@@ -2,7 +2,7 @@ import { supabase } from '../../lib/supabase'
 import { addDays, todayIn, type Activity, type DailyLog, type Journey, type JourneyStep, type Note, type Offensive, type Profile, type ProgressItem, type Schedule, type Summary } from '../../domain/tracking'
 
 export type TrackingData = { profile: Profile; today: string; offensives: Offensive[]; offensive: Offensive | null;
-  activities: Activity[]; schedules: Schedule[]; logs: DailyLog[]; summaries: Summary[]; note: Note | null;
+  activities: Activity[]; schedules: Schedule[]; logs: DailyLog[]; yesterdayLogs: DailyLog[]; summaries: Summary[]; note: Note | null;
   journeys: Journey[]; journeySteps: JourneyStep[]; objectives: ProgressItem[]; tasks: ProgressItem[]; subtasks: ProgressItem[]; needsMigration: boolean; needsJourneysMigration: boolean }
 
 export function describeError(error: unknown): string {
@@ -43,7 +43,7 @@ export async function loadTracking(userId: string, selected: string | null): Pro
     catch (error) { if ((error as { code?: string }).code === 'PGRST202') needsMigration = true; else throw error }
   }
   // Today remains usable even outside an offensive. Older periods are synchronized in bounded batches.
-  await sync(today, today)
+  await sync(addDays(today, -1), today)
   const until = offensive && offensive.end_date < today ? offensive.end_date : today
   if (!needsMigration && offensive) {
     for (let from = offensive.start_date; from <= until; from = addDays(from, 366)) {
@@ -55,12 +55,13 @@ export async function loadTracking(userId: string, selected: string | null): Pro
     if (code === 'PGRST205' || code === '42P01') return null
     throw error
   })
-  const [activities, schedules, logs, summaries, notes, journeys, objectives, tasks, subtasks] = await Promise.all([
+  const [activities, schedules, logs, yesterdayLogs, summaries, notes, journeys, objectives, tasks, subtasks] = await Promise.all([
     rows<Activity>('daily_activities', userId), rows<Schedule>('activity_schedules', userId),
     rows<DailyLog>('daily_activity_logs', userId, { column: 'scheduled_date', from: today, to: today }),
+    rows<DailyLog>('daily_activity_logs', userId, { column: 'scheduled_date', from: addDays(today, -1), to: addDays(today, -1) }),
     offensive && offensive.start_date <= until ? rows<Summary>('daily_summaries', userId, { column: 'day', from: offensive.start_date, to: until }) : Promise.resolve([]),
     rows<Note>('daily_notes', userId, { column: 'day', from: today, to: today }),
     rows<Journey>('journeys', userId), rows<ProgressItem>('objectives', userId), rows<ProgressItem>('tasks', userId), rows<ProgressItem>('subtasks', userId),
   ])
-  return { profile, today, offensives, offensive, activities, schedules, logs, summaries, note: notes[0] || null, journeys, journeySteps: journeySteps || [], objectives, tasks, subtasks, needsMigration, needsJourneysMigration: journeySteps === null }
+  return { profile, today, offensives, offensive, activities, schedules, logs, yesterdayLogs, summaries, note: notes[0] || null, journeys, journeySteps: journeySteps || [], objectives, tasks, subtasks, needsMigration, needsJourneysMigration: journeySteps === null }
 }
